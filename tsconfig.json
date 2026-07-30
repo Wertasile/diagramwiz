@@ -30,6 +30,6 @@
     "**/*.mts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
-  ],
+, "components/fabric/Layer.jsx", "components/fabric/ShapeSidebar.jsx"  ],
   "exclude": ["node_modules"]
 }

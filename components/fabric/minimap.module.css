@@ -1,0 +1,18 @@
+.minimap {
+  position: absolute;
+  /* clear fixed right panel (~268px) + toolbar */
+  right: 292px;
+  bottom: 80px;
+  width: 75px;
+  height: 75px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 0.8);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  z-index: 30;
+  background: var(--card);
+}
+
+:global(.dark) .minimap {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}

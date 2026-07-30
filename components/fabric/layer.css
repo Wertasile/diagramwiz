@@ -1,0 +1,200 @@
+.layerContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  flex: 1;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in oklch, var(--muted) 35%, transparent);
+}
+
+.layerContainer h3 {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted-foreground);
+}
+
+.layerList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+}
+
+.layerItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius) * 0.8);
+  background: transparent;
+  color: var(--foreground);
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: grab;
+  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  user-select: none;
+}
+
+.layerItem:active {
+  cursor: grabbing;
+}
+
+.layerItem:hover {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.layerItem.selected {
+  background-color: var(--accent);
+  border-color: var(--border);
+  color: var(--accent-foreground);
+}
+
+.layerItem.dragging {
+  opacity: 0.45;
+}
+
+.layerDragHandle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+  opacity: 0.7;
+}
+
+.layerItem:hover .layerDragHandle,
+.layerItem.selected .layerDragHandle {
+  opacity: 1;
+}
+
+.layerDropIndicator {
+  height: 2px;
+  margin: 1px 4px;
+  border-radius: 2px;
+  background: var(--primary);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 35%, transparent);
+}
+
+.layerType {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.layerIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.layerIconSvg {
+  width: 20px;
+  height: 16px;
+  display: block;
+}
+
+.layerName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.layerMetaIcon {
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+
+.layerContextMenu {
+  position: fixed;
+  z-index: 3000;
+  min-width: 180px;
+  padding: 4px;
+  border-radius: calc(var(--radius));
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.dark .layerContextMenu {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.layerContextItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: calc(var(--radius) * 0.8);
+  background: transparent;
+  color: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.layerContextItem:hover,
+.layerContextItem:focus-visible {
+  outline: none;
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.layerContextItem.destructive {
+  color: var(--destructive);
+}
+
+.layerContextItem.destructive:hover,
+.layerContextItem.destructive:focus-visible {
+  background: color-mix(in oklch, var(--destructive) 12%, transparent);
+  color: var(--destructive);
+}
+
+.layerContextShortcut {
+  margin-left: auto;
+  font-size: 0.625rem;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.layerContextItem.destructive .layerContextShortcut {
+  color: inherit;
+  opacity: 0.7;
+}
+
+.layerContextSeparator {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
