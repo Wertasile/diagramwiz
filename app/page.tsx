@@ -22,9 +22,9 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import styles from "./home.module.css"
 
 export const metadata: Metadata = {
-  title: "Fabric.js Playground — Placeholder",
+  title: "DiagramWiz",
   description:
-    "Placeholder homepage for a local-first Fabric.js canvas playground: flowcharts, shapes, import/export, layers, and more — no login required.",
+    "Diagramwiz is a tool for creating and editing diagrams.",
 }
 
 const FEATURES = [
@@ -114,7 +114,7 @@ export default function Page() {
       <div className={styles.atmosphere} aria-hidden="true" />
 
       <header className={styles.topBar}>
-        <span className={styles.brandMark}>Fabric.js Playground</span>
+        <span className={styles.brandMark}>DiagramWiz</span>
         <div className={styles.topActions}>
           <ThemeToggle />
           <Button render={<Link href="/playground" />} size="sm">
@@ -126,10 +126,7 @@ export default function Page() {
 
       <main>
         <section className={styles.hero}>
-          <Badge variant="outline" className={styles.placeholderBadge}>
-            Placeholder homepage
-          </Badge>
-          <h1 className={styles.brand}>Fabric.js Playground</h1>
+          <h1 className={styles.brand}>DiagramWiz</h1>
           <p className={styles.lede}>
             A local-first canvas for shapes, flowcharts, and exports — no
             signup. This page is a temporary stand-in while the real marketing
@@ -178,14 +175,14 @@ export default function Page() {
 
       <footer className={styles.footer}>
         <p>
-          Placeholder page · built on{" "}
+          Placeholder page · built by {" "}
           <a
-            href="https://fabricjs.com"
+            href="https://ahmedarfan.com"
             target="_blank"
             rel="noreferrer"
             className={styles.footerLink}
           >
-            Fabric.js
+            Ahmed Arfan
           </a>
         </p>
         <Button render={<Link href="/playground" />} variant="ghost" size="sm">
