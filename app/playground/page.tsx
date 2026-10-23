@@ -4,8 +4,8 @@ import { Canvas, FabricObject, PencilBrush, Point, Polyline, Textbox, util } fro
 import React, { useRef, useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
 import styles from './playground.module.css'
-import { PointerIcon, WorkflowIcon, PencilIcon, PenToolIcon, MessageSquareText, StickyNote } from 'lucide-react'
-import Sidebar from '@/components/fabric/Sidebar'
+import { PointerIcon, WorkflowIcon, PencilIcon, PenToolIcon, MessageSquareText, StickyNote, EraserIcon } from 'lucide-react'
+import Sidebar from '@/components/fabric/RightSidebar'
 import Layer from '@/components/fabric/Layer'
 import FlowchartTextMenu from '@/components/fabric/FlowchartTextMenu'
 import Minimap from '@/components/fabric/Minimap'
@@ -40,6 +40,8 @@ import {
     sanitizePlaygroundSettings,
     savePlaygroundSettings,
 } from '@/components/fabric-helper/playground-settings'
+import { BroomIcon } from '@phosphor-icons/react'
+import { EraserBrush } from '@erase2d/fabric'
 
 type XY = { x: number; y: number }
 
@@ -246,6 +248,8 @@ function page() {
     const [drawingMode, setDrawingMode] = useState(false)
     const [flowchartMode, setFlowchartMode] = useState(false)
 
+    const [eraserMode, setEraserMode] = useState(false)
+
     const [penMode, setPenMode] = useState(false)
     const [textEdit, setTextEdit] = useState<{
         group: FlowchartNode
@@ -378,6 +382,7 @@ function page() {
         }
 
         setPenMode(false)
+        setEraserMode(false)
         setDrawingMode(true)
         if (canvas) {
             canvas.isDrawingMode = true
@@ -385,6 +390,28 @@ function page() {
             pencilBrush.color = getThemeLineStroke(resolvedTheme === 'dark')
             pencilBrush.width = settingsRef.current.brushWidth
             canvas.freeDrawingBrush = pencilBrush
+            canvas.renderAll()
+        }
+    }
+
+    const enterEraserMode = () => {
+        if (eraserMode) {
+            setEraserMode(false)
+            if (canvas) {
+                canvas.isDrawingMode = false
+                canvas.renderAll()
+            }
+            return
+        }
+        setPenMode(false)
+        setDrawingMode(false)
+        setEraserMode(true)
+        if (canvas) {
+            canvas.isDrawingMode = true
+            const eraserBrush = new EraserBrush(canvas)
+            eraserBrush.color = getThemeLineStroke(resolvedTheme === 'dark')
+            eraserBrush.width = 10
+            canvas.freeDrawingBrush = eraserBrush
             canvas.renderAll()
         }
     }
@@ -441,12 +468,14 @@ function page() {
             {canvas && playgroundSettings.showMinimap && <Minimap canvas={canvas} size={75} />}
         </div>
 
+        {/* -------------------------- LEFT SIDEBAR -------------------------- */}
         {canvas && (
           <aside className={`${styles.panel} ${styles.leftPanel}`}>
             <ShapeSidebar onAddShape={handleAddShape} />
           </aside>
         )}
 
+        {/* -------------------------- TEXT EDIT MENU -------------------------- */}
         {canvas && textEdit && (
             <FlowchartTextMenu
                 canvas={canvas}
@@ -456,6 +485,7 @@ function page() {
             />
         )}
 
+        {/* -------------------------- TOP SETTINGS MENU -------------------------- */}
         {canvas && (
           <div className={styles.topBar}>
             <FilesMenu
@@ -477,9 +507,20 @@ function page() {
               onSettingsChange={updatePlaygroundSettings}
             />
             <ThemeToggle />
+            <Button variant="outline" size="icon-sm" aria-label="Clear canvas" title="Clear canvas" 
+              onClick={() => {
+                if (canvas) {
+                    canvas.clear()
+                    canvas.renderAll()
+                }
+              }}
+            >
+                <BroomIcon />
+            </Button>
           </div>
         )}
 
+        {/* -------------------------- TOOLBAR -------------------------- */}
         <div className={styles.toolbar}>
             <Button
               type="button"
@@ -494,6 +535,7 @@ function page() {
             >
               <PointerIcon />
             </Button>
+
             <Button
               type="button"
               variant={drawingMode ? 'default' : 'ghost'}
@@ -523,6 +565,16 @@ function page() {
               onClick={enterFlowchartMode}
             >
               <WorkflowIcon />
+            </Button>
+            <Button
+              type="button"
+              variant={eraserMode ? 'default' : 'ghost'}
+              size="icon-sm"
+              aria-pressed={eraserMode}
+              title="Eraser"
+              onClick={enterEraserMode}
+            >
+              <EraserIcon />
             </Button>
 
             <Separator orientation="vertical" className="mx-1 data-vertical:h-6" />
@@ -563,6 +615,7 @@ function page() {
             </Button>
         </div>
 
+        {/* -------------------------- RIGHT SIDEBAR -------------------------- */}
         {canvas && (
           <aside className={`${styles.panel} ${styles.rightPanel}`}>
             <Sidebar

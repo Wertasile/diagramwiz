@@ -130,3 +130,21 @@
     @apply font-sans;
     }
 }
+
+.color-picker {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 40px;
+  height: 40px;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+}
+.color-picker::-webkit-color-swatch {
+  border-radius: 15px;
+  border: none;
+}
+.color-picker::-moz-color-swatch {
+  border-radius: 15px;
+} 

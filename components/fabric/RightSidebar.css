@@ -34,10 +34,10 @@
 }
 
 .sidebarRow {
-  display: grid;
-  grid-template-columns: 64px 1fr;
-  align-items: center;
+  display: flex;
+  flex-direction: row;
   gap: 8px;
+  align-items: center;
 }
 
 .sidebarRow label {

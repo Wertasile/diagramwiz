@@ -1,6 +1,6 @@
 import { Canvas, FabricObject } from 'fabric'
 import React, { useState, useEffect } from 'react'
-import './sidebar.css'
+import './RightSidebar.css'
 import CroppingSettings from './cropping/CroppingSettings'
 import Cropping from './cropping/Cropping'
 import { Input } from '@/components/ui/input'
@@ -154,54 +154,59 @@ const Sidebar = ({ canvas, refreshKey, handleFramesUpdated }: SidebarProps) => {
   const disabled = !selectedObject
 
   return (
+    <>
     <div className="sidebarContainer">
       <div className="sidebarSection">
         <h3>Position</h3>
-        <div className="sidebarRow">
-          <Label htmlFor="object-x">X</Label>
-          <Input
-            id="object-x"
-            type="number"
-            disabled={disabled}
-            value={left}
-            onChange={(e) => handleLeftChange(Number(e.target.value))}
-          />
-        </div>
-        <div className="sidebarRow">
-          <Label htmlFor="object-y">Y</Label>
-          <Input
-            id="object-y"
-            type="number"
-            disabled={disabled}
-            value={top}
-            onChange={(e) => handleTopChange(Number(e.target.value))}
-          />
+        <div className='flex flex-row gap-4'>
+          <div className="sidebarRow">
+            <Label htmlFor="object-x">X</Label>
+            <Input
+              id="object-x"
+              type="number"
+              disabled={disabled}
+              value={left}
+              onChange={(e) => handleLeftChange(Number(e.target.value))}
+            />
+          </div>
+          <div className="sidebarRow">
+            <Label htmlFor="object-y">Y</Label>
+            <Input
+              id="object-y"
+              type="number"
+              disabled={disabled}
+              value={top}
+              onChange={(e) => handleTopChange(Number(e.target.value))}
+            />
+          </div>
         </div>
       </div>
 
       <div className="sidebarSection">
         <h3>Size</h3>
-        <div className="sidebarRow">
-          <Label htmlFor="object-width">W</Label>
-          <Input
-            id="object-width"
-            type="number"
-            min={1}
-            disabled={disabled}
-            value={width}
-            onChange={(e) => handleWidthChange(Number(e.target.value))}
-          />
-        </div>
-        <div className="sidebarRow">
-          <Label htmlFor="object-height">H</Label>
-          <Input
-            id="object-height"
-            type="number"
-            min={1}
-            disabled={disabled}
-            value={height}
-            onChange={(e) => handleHeightChange(Number(e.target.value))}
-          />
+        <div className='flex flex-row gap-4'>
+          <div className="sidebarRow">
+            <Label htmlFor="object-width">W</Label>
+            <Input
+              id="object-width"
+              type="number"
+              min={1}
+              disabled={disabled}
+              value={width}
+              onChange={(e) => handleWidthChange(Number(e.target.value))}
+            />
+          </div>
+          <div className="sidebarRow">
+            <Label htmlFor="object-height">H</Label>
+            <Input
+              id="object-height"
+              type="number"
+              min={1}
+              disabled={disabled}
+              value={height}
+              onChange={(e) => handleHeightChange(Number(e.target.value))}
+            />
+          </div>
         </div>
       </div>
 
@@ -211,7 +216,7 @@ const Sidebar = ({ canvas, refreshKey, handleFramesUpdated }: SidebarProps) => {
           <Label htmlFor="object-fill">Fill</Label>
           <input
             id="object-fill"
-            className="sidebarColor"
+            className="color-picker"
             type="color"
             disabled={disabled}
             value={color}
@@ -222,7 +227,7 @@ const Sidebar = ({ canvas, refreshKey, handleFramesUpdated }: SidebarProps) => {
           <Label htmlFor="object-stroke">Stroke</Label>
           <input
             id="object-stroke"
-            className="sidebarColor"
+            className="color-picker"
             type="color"
             disabled={disabled}
             value={borderColor}
@@ -273,6 +278,12 @@ const Sidebar = ({ canvas, refreshKey, handleFramesUpdated }: SidebarProps) => {
         </div>
       </div>
     </div>
+
+    <script>
+
+    </script>
+
+    </>
   )
 }
 

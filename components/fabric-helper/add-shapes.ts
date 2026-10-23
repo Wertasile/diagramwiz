@@ -47,6 +47,7 @@ export const addCircle = (canvas: Canvas, options: ShapeOptions = {}) => {
     ...DEFAULT_SHAPE_OPTIONS,
     radius: 50,
     shapeKind: 'circle',
+    erasable: true,
     ...options,
   })
   return addObjectToCanvas(canvas, circle)
