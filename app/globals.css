@@ -131,6 +131,29 @@
     }
 }
 
+/* Total width of the scrollbar */
+html::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+/* The background track */
+html::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+/* The draggable handle */
+html::-webkit-scrollbar-thumb {
+  background: var(--primary);
+}
+
+/* Handle on hover */
+html::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-foreground);
+}
+
+
+
 .color-picker {
   -webkit-appearance: none;
   -moz-appearance: none;

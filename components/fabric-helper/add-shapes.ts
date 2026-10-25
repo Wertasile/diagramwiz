@@ -29,6 +29,12 @@ export type ConnectorLine = Polyline & {
 export type AddLineOptions = ShapeOptions & {
   /** Called while a vertex control is dragged (e.g. snap to object ports). */
   onEndpointDrag?: (line: Polyline, pointIndex: number) => void
+  /** Optional path points (defaults to a short horizontal stub). */
+  points?: { x: number; y: number }[]
+  /** Prefill endpoint attachments (e.g. when spawning from a port). */
+  endpointConnections?: Record<number, ConnectionPoint | null>
+  /** Override centering when placing at an explicit world position. */
+  centerInViewport?: boolean
 }
 
 export const addRectangle = (canvas: Canvas, options: ShapeOptions = {}) => {
@@ -47,7 +53,6 @@ export const addCircle = (canvas: Canvas, options: ShapeOptions = {}) => {
     ...DEFAULT_SHAPE_OPTIONS,
     radius: 50,
     shapeKind: 'circle',
-    erasable: true,
     ...options,
   })
   return addObjectToCanvas(canvas, circle)
@@ -195,37 +200,42 @@ export function enableLineVertexEditing(
  * Pass `onEndpointDrag` to snap endpoints while editing.
  */
 export const addLine = (canvas: Canvas, options: AddLineOptions = {}) => {
-  const { onEndpointDrag, ...shapeOptions } = options
+  const {
+    onEndpointDrag,
+    points,
+    endpointConnections,
+    centerInViewport,
+    ...shapeOptions
+  } = options
 
-  const line = new Polyline(
-    [
-      { x: 50, y: 50 },
-      { x: 200, y: 50 },
-    ],
-    {
-      fill: '',
-      stroke: getThemeLineStroke(),
-      strokeWidth: 2,
-      strokeUniform: true,
-      shapeKind: 'line',
-      // Skip scale/rotate UI — vertex editing only
-      hasBorders: false,
-      lockScalingX: true,
-      lockScalingY: true,
-      lockRotation: true,
-      objectCaching: false,
-      cornerStyle: 'circle',
-      cornerColor: LINE_CORNER_COLOR,
-      cornerStrokeColor: LINE_CORNER_STROKE,
-      transparentCorners: false,
-      cornerSize: 12,
-      ...shapeOptions,
-    }
-  )
+  const linePoints = points ?? [
+    { x: 50, y: 50 },
+    { x: 200, y: 50 },
+  ]
+
+  const line = new Polyline(linePoints, {
+    fill: '',
+    stroke: getThemeLineStroke(),
+    strokeWidth: 2,
+    strokeUniform: true,
+    shapeKind: 'line',
+    // Skip scale/rotate UI — vertex editing only
+    hasBorders: false,
+    lockScalingX: true,
+    lockScalingY: true,
+    lockRotation: true,
+    objectCaching: false,
+    cornerStyle: 'circle',
+    cornerColor: LINE_CORNER_COLOR,
+    cornerStrokeColor: LINE_CORNER_STROKE,
+    transparentCorners: false,
+    cornerSize: 12,
+    ...shapeOptions,
+  })
 
   const connector = line as ConnectorLine
   connector.isConnector = true
-  connector.endpointConnections = {
+  connector.endpointConnections = endpointConnections ?? {
     0: null,
     1: null,
   }
@@ -238,7 +248,9 @@ export const addLine = (canvas: Canvas, options: AddLineOptions = {}) => {
     enableLineVertexEditing(canvas, line, onEndpointDrag)
   })
 
-  return addObjectToCanvas(canvas, line)
+  return addObjectToCanvas(canvas, line, {
+    centerInViewport: centerInViewport ?? points == null,
+  }) as ConnectorLine
 }
 
 export type ShapeId =

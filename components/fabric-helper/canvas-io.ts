@@ -101,12 +101,26 @@ export function rehydrateCanvasObjects(canvas: Canvas, options: RehydrateOptions
   for (const object of topLevel) {
     ensureObjectId(object)
 
-    const connector = object as ConnectorLine
-    if (connector.isConnector || (object as FabricObject & { shapeKind?: string }).shapeKind === 'line') {
+    const connector = object as ConnectorLine & {
+      shapeKind?: string
+      isOpenPolygon?: boolean
+    }
+    const isAttachablePolyline =
+      connector.isConnector ||
+      connector.shapeKind === 'line' ||
+      connector.isOpenPolygon === true ||
+      (connector.shapeKind === 'polygon' && object instanceof Polyline)
+
+    if (isAttachablePolyline) {
       if (!(object instanceof Polyline)) continue
       connector.isConnector = true
       if (!connector.endpointConnections) {
-        connector.endpointConnections = { 0: null, 1: null }
+        const connections: Record<number, null> = {}
+        const pointCount = object.points?.length ?? 2
+        for (let i = 0; i < pointCount; i++) {
+          connections[i] = null
+        }
+        connector.endpointConnections = connections
       }
       enableLineVertexEditing(canvas, object, options.onEndpointDrag)
       object.off('selected')

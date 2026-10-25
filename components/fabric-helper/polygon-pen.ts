@@ -8,6 +8,7 @@ import {
   type TPointerEvent,
 } from 'fabric'
 import { addObjectToCanvas } from './object-utils'
+import { enableLineVertexEditing, type ConnectorLine } from './add-shapes'
 import {
   getThemeLineStroke,
   LINE_CORNER_COLOR,
@@ -24,8 +25,11 @@ export type PolygonPenCleanup = () => void
 export type PolygonPenOptions = {
   getStroke?: () => string
   getFill?: () => string
+  getStrokeWidth?: () => number
   /** Called when user presses Escape with no in-progress points (exit tool). */
   onRequestExit?: () => void
+  /** Snap open-polyline vertices to shape / flowchart ports (same as connectors). */
+  onEndpointDrag?: (line: Polyline, pointIndex: number) => void
 }
 
 function isTypingTarget(target: EventTarget | null) {
@@ -47,11 +51,11 @@ function screenDist(canvas: Canvas, a: XY, b: XY) {
   return dist(a, b) * zoom
 }
 
-function makePreviewPolyline(points: XY[], stroke: string) {
+function makePreviewPolyline(points: XY[], stroke: string, strokeWidth: number) {
   const line = new Polyline(points, {
     fill: '',
     stroke,
-    strokeWidth: 2,
+    strokeWidth,
     strokeUniform: true,
     selectable: false,
     evented: false,
@@ -118,6 +122,8 @@ export function activatePolygonPen(
       document.documentElement.classList.contains('dark')
         ? 'rgba(255,255,255,0.06)'
         : 'rgba(23,23,23,0.04)')
+  const getStrokeWidth = options.getStrokeWidth ?? (() => 2)
+  const onEndpointDrag = options.onEndpointDrag
 
   const points: XY[] = []
   let cursor: XY | null = null
@@ -160,7 +166,7 @@ export function activatePolygonPen(
           : [...points, cursor]
         : [...points]
 
-    preview = makePreviewPolyline(previewPoints, stroke)
+    preview = makePreviewPolyline(previewPoints, stroke, getStrokeWidth())
     // Dashed rubber-band feel for the live segment
     if (cursor && !closeHint) {
       preview.set({ strokeDashArray: [6, 4] })
@@ -191,9 +197,9 @@ export function activatePolygonPen(
     canvas.requestRenderAll()
   }
 
-  const enableVertexEditing = (poly: Polygon | Polyline) => {
-    enablePolygonVertexEditing(canvas, poly as Polygon)
-    poly.on('selected', () => enablePolygonVertexEditing(canvas, poly as Polygon))
+  const enableClosedVertexEditing = (poly: Polygon) => {
+    enablePolygonVertexEditing(canvas, poly)
+    poly.on('selected', () => enablePolygonVertexEditing(canvas, poly))
   }
 
   /** Closed shape (≥3 points, clicked first point). */
@@ -206,14 +212,14 @@ export function activatePolygonPen(
     const polygon = new Polygon(committed, {
       fill: getFill(),
       stroke: getStroke(),
-      strokeWidth: 2,
+      strokeWidth: getStrokeWidth(),
       strokeUniform: true,
       objectCaching: false,
     })
     ;(polygon as Polygon & { shapeKind?: string }).shapeKind = 'polygon'
 
     addObjectToCanvas(canvas, polygon, { centerInViewport: false })
-    enableVertexEditing(polygon)
+    enableClosedVertexEditing(polygon)
   }
 
   /** Open / incomplete path (≥2 points) — Enter or double-click without closing. */
@@ -226,16 +232,29 @@ export function activatePolygonPen(
     const openPoly = new Polyline(committed, {
       fill: '',
       stroke: getStroke(),
-      strokeWidth: 2,
+      strokeWidth: getStrokeWidth(),
       strokeUniform: true,
       objectCaching: false,
     })
-    const tagged = openPoly as Polyline & { shapeKind?: string; isOpenPolygon?: boolean }
+    const tagged = openPoly as ConnectorLine & {
+      shapeKind?: string
+      isOpenPolygon?: boolean
+    }
     tagged.shapeKind = 'polygon'
     tagged.isOpenPolygon = true
+    // Same sticky attach behavior as sidebar connector lines
+    tagged.isConnector = true
+    const endpointConnections: Record<number, null> = {}
+    for (let i = 0; i < committed.length; i++) {
+      endpointConnections[i] = null
+    }
+    tagged.endpointConnections = endpointConnections
 
     addObjectToCanvas(canvas, openPoly, { centerInViewport: false })
-    enableVertexEditing(openPoly)
+    enableLineVertexEditing(canvas, openPoly, onEndpointDrag)
+    openPoly.on('selected', () => {
+      enableLineVertexEditing(canvas, openPoly, onEndpointDrag)
+    })
   }
 
   /** Finish current path: open if not closed to first point. */

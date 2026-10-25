@@ -6,6 +6,7 @@ import Cropping from './cropping/Cropping'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { setErasable } from '@/components/fabric-helper/erase-utils'
 
 type SidebarProps = {
   canvas: Canvas
@@ -25,6 +26,7 @@ const Sidebar = ({ canvas, refreshKey, handleFramesUpdated }: SidebarProps) => {
   const [borderWidth, setBorderWidth] = useState(0)
   const [opacity, setOpacity] = useState(1)
   const [visible, setVisible] = useState(true)
+  const [erasable, setErasableState] = useState(false)
 
   useEffect(() => {
     const handleObjectSelection = (object: FabricObject | undefined) => {
@@ -48,6 +50,7 @@ const Sidebar = ({ canvas, refreshKey, handleFramesUpdated }: SidebarProps) => {
       setBorderWidth(object.strokeWidth ?? 0)
       setOpacity(object.opacity ?? 1)
       setVisible(object.visible ?? true)
+      setErasableState(Boolean(object.erasable))
     }
 
     const clearSettings = () => {
@@ -60,6 +63,7 @@ const Sidebar = ({ canvas, refreshKey, handleFramesUpdated }: SidebarProps) => {
       setBorderWidth(0)
       setOpacity(1)
       setVisible(true)
+      setErasableState(false)
     }
 
     const onSelectionCreated = (e: { selected?: FabricObject[] }) => {
@@ -149,6 +153,14 @@ const Sidebar = ({ canvas, refreshKey, handleFramesUpdated }: SidebarProps) => {
   const handleVisibleChange = (value: boolean) => {
     setVisible(value)
     applyObjectChange({ visible: value })
+  }
+
+  const handleErasableChange = (value: boolean) => {
+    if (!selectedObject) return
+    setErasableState(value)
+    // Apply to everything that is selected (multi-select), not just the first object.
+    const active = canvas.getActiveObjects()
+    setErasable(canvas, active.length > 0 ? active : [selectedObject], value)
   }
 
   const disabled = !selectedObject
@@ -266,6 +278,20 @@ const Sidebar = ({ canvas, refreshKey, handleFramesUpdated }: SidebarProps) => {
             disabled={disabled}
             checked={visible}
             onCheckedChange={handleVisibleChange}
+          />
+        </div>
+      </div>
+
+      <div className="sidebarSection">
+        <h3>Erasing</h3>
+        <div className="sidebarRow">
+          <Label htmlFor="object-erasable">Erasable</Label>
+          <Switch
+            id="object-erasable"
+            size="sm"
+            disabled={disabled}
+            checked={erasable}
+            onCheckedChange={handleErasableChange}
           />
         </div>
       </div>

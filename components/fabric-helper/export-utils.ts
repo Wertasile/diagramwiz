@@ -23,7 +23,8 @@ export function isExportExcluded(object: FabricObject): boolean {
   return (
     id.startsWith('vertical') ||
     id.startsWith('horizontal') ||
-    id.startsWith('__pen-')
+    id.startsWith('__pen-') ||
+    id.startsWith('__port-')
   )
 }
 

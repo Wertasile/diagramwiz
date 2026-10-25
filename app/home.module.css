@@ -41,8 +41,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  position: fixed;
+  z-index: 100;
+  width: 100%;
   padding: 1rem 1.5rem;
-  border-bottom: 1px solid color-mix(in oklch, var(--border) 80%, transparent);
+  background: color-mix(in oklch, var(--muted) 35%, var(--background));
+  border-bottom: 3px solid rgba(0, 0, 0, 1);
   backdrop-filter: blur(8px);
 }
 

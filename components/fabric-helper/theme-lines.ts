@@ -2,8 +2,8 @@ import { Canvas, FabricObject, Polygon, Polyline } from 'fabric'
 
 export const LIGHT_LINE_STROKE = '#171717'
 export const DARK_LINE_STROKE = '#ffffff'
-export const LINE_CORNER_COLOR = '#3B82F6'
-export const LINE_CORNER_STROKE = '#1D4ED8'
+export const LINE_CORNER_COLOR = '#ffffff'
+export const LINE_CORNER_STROKE = '#0D99FF'
 
 export function getThemeLineStroke(isDark?: boolean): string {
   const dark =

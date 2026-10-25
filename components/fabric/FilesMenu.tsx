@@ -74,7 +74,8 @@ export default function FilesMenu({
           return !(
             id.startsWith('vertical') ||
             id.startsWith('horizontal') ||
-            id.startsWith('__pen-')
+            id.startsWith('__pen-') ||
+            id.startsWith('__port-')
           )
         })
       )
