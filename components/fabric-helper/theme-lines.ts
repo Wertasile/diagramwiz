@@ -1,4 +1,5 @@
 import { Canvas, FabricObject, Polygon, Polyline } from 'fabric'
+import { isEphemeralId } from './export-utils'
 
 export const LIGHT_LINE_STROKE = '#171717'
 export const DARK_LINE_STROKE = '#ffffff'
@@ -15,8 +16,7 @@ export function getThemeLineStroke(isDark?: boolean): string {
 }
 
 function isGuideline(object: FabricObject) {
-  const id = (object as FabricObject & { id?: string }).id ?? ''
-  return id.startsWith('vertical') || id.startsWith('horizontal') || id.startsWith('__pen-')
+  return isEphemeralId((object as FabricObject & { id?: string }).id)
 }
 
 function isThemeSyncedStroke(object: FabricObject) {

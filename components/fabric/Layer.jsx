@@ -15,7 +15,7 @@ import {
   ImageDown,
 } from 'lucide-react'
 import { LayerIcon, getLayerDisplayName, resolveLayerSymbol } from './LayerIcon'
-import { exportObjectAsPng, exportCropFrameAsPng, isCropFrame } from '@/components/fabric-helper/export-utils'
+import { exportObjectAsPng, exportCropFrameAsPng, isCropFrame, isEphemeralId } from '@/components/fabric-helper/export-utils'
 import './layer.css'
 
 function isTypingTarget(target) {
@@ -31,12 +31,7 @@ function isTypingTarget(target) {
 function isManagedLayerObject(object) {
   const id = object?.id ?? ''
   if (!id) return true
-  return !(
-    id.startsWith('vertical') ||
-    id.startsWith('horizontal') ||
-    id.startsWith('__pen-') ||
-    id.startsWith('__port-')
-  )
+  return !isEphemeralId(id)
 }
 
 function Layer({ canvas }) {

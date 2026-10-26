@@ -5,9 +5,6 @@ export type ShapeOptions = Record<string, unknown>
 export const DEFAULT_SHAPE_OPTIONS = {
   left: 100,
   top: 100,
-  fill: '#ffffff',
-  stroke: '#000000',
-  strokeWidth: 2,
 } as const
 
 export type AddObjectOptions = {
@@ -33,6 +30,23 @@ export const centerObjectInViewport = (canvas: Canvas, obj: FabricObject) => {
   obj.setCoords()
 }
 
+let captureSink: FabricObject[] | null = null
+
+/**
+ * Run an `add*` helper without touching the canvas: the object it would have added
+ * is returned instead. Lets previews / placement reuse every existing shape builder.
+ */
+export const captureBuiltObject = (build: () => unknown): FabricObject | null => {
+  const sink: FabricObject[] = []
+  captureSink = sink
+  try {
+    build()
+  } finally {
+    captureSink = null
+  }
+  return sink[0] ?? null
+}
+
 /** Assign an id, optionally center in viewport, add to canvas, and re-render. */
 export const addObjectToCanvas = (
   canvas: Canvas,
@@ -40,6 +54,11 @@ export const addObjectToCanvas = (
   options: AddObjectOptions = {}
 ): FabricObject => {
   const { centerInViewport = true } = options
+
+  if (captureSink) {
+    captureSink.push(obj)
+    return obj
+  }
 
   ensureObjectId(obj)
 

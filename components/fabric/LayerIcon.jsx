@@ -211,6 +211,8 @@ const TYPE_ALIASES = {
   Polygon: 'polygon',
   polyline: 'line',
   Polyline: 'line',
+  elbowconnector: 'line',
+  ElbowConnector: 'line',
   line: 'line',
   Line: 'line',
   textbox: 'textbox',

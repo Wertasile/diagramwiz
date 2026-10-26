@@ -18,6 +18,8 @@ import { PointerIcon, WorkflowIcon, PencilIcon, PenToolIcon, MessageSquareText, 
 import Sidebar from '@/components/fabric/RightSidebar'
 import Layer from '@/components/fabric/Layer'
 import FlowchartTextMenu from '@/components/fabric/FlowchartTextMenu'
+import ConnectorMenu from '@/components/fabric/ConnectorMenu'
+import { ElbowConnector } from '@/components/fabric-helper/connectors/elbow-connector'
 import Minimap from '@/components/fabric/Minimap'
 import FilesMenu from '@/components/fabric/FilesMenu'
 import { Settings } from '@/dialog/settings'
@@ -36,7 +38,7 @@ import {
     type ConnectionPoint,
     type ConnectorLine,
 } from '@/components/fabric-helper/add-shapes'
-import { isCropFrame, isExportExcluded } from '@/components/fabric-helper/export-utils'
+import { isExportExcluded } from '@/components/fabric-helper/export-utils'
 import { FLOWCHART_ADDERS, isFlowchartId } from '@/components/fabric-helper/add-flowchart'
 import {
     getFlowchartShape,
@@ -64,377 +66,14 @@ import {
     registerCanvasCustomProperties,
     rehydrateCanvasObjects,
 } from '@/components/fabric-helper/canvas-io'
-
-type XY = { x: number; y: number }
-
-type PortMarker = Circle & {
-    id?: string
-    objectId?: string
-    portHostId?: string
-    portType?: ConnectionPoint['type']
-    isPortMarker?: boolean
-}
-
-type ConnectDragState = {
-    line: ConnectorLine
-    sourceObjectId: string
-    sourcePort: ConnectionPoint['type']
-}
-
-// ------------------------------------- HELPERS FUNCTIONS FOR LINE SNAPPING TO OBJECT -------------------------------------
-const DEFAULT_SNAP_DISTANCE = 20
-/** Visual / hit radius of connection port handles. */
-const PORT_RADIUS = 6
-/** Push ports outward so they clear the shape edge + selection chrome. */
-const PORT_OUTSET = 10
-const PORT_COLOR = '#0D99FF'
-
-const isPortMarker = (object: FabricObject | null | undefined): object is PortMarker => {
-    if (!object) return false
-    const tagged = object as PortMarker
-    return (
-        tagged.isPortMarker === true ||
-        Boolean(tagged.id?.startsWith('__port-')) ||
-        Boolean(tagged.objectId?.startsWith('__port-'))
-    )
-}
-
-const isConnectableObject = (object: FabricObject | null | undefined): boolean => {
-    if (!object || isPortMarker(object) || isExportExcluded(object)) return false
-    if (object instanceof Polyline) return false
-    if (object instanceof Textbox) return false
-    if (isCropFrame(object)) return false
-
-    if (isFlowchartNode(object)) return true
-
-    const kind = (object as FabricObject & { shapeKind?: string }).shapeKind
-    if (
-        kind === 'image' ||
-        kind === 'comment' ||
-        kind === 'stickyNote' ||
-        kind === 'textbox' ||
-        kind === 'crop' ||
-        kind === 'line'
-    ) {
-        return false
-    }
-    if (
-        kind === 'rectangle' ||
-        kind === 'circle' ||
-        kind === 'triangle' ||
-        kind === 'polygon'
-    ) {
-        return true
-    }
-
-    const type = String(object.type || '').toLowerCase()
-    return ['rect', 'circle', 'triangle', 'ellipse', 'polygon'].includes(type)
-}
-
-const outsetPortsFromCenter = (
-    ports: Record<ConnectionPoint['type'], XY>,
-    center: XY,
-    distance: number
-): Record<ConnectionPoint['type'], XY> => {
-    const out = { ...ports }
-    for (const key of Object.keys(out) as ConnectionPoint['type'][]) {
-        const p = out[key]
-        const dx = p.x - center.x
-        const dy = p.y - center.y
-        const len = Math.hypot(dx, dy) || 1
-        out[key] = {
-            x: p.x + (dx / len) * distance,
-            y: p.y + (dy / len) * distance,
-        }
-    }
-    return out
-}
-
-const getObjectPorts = (object: FabricObject): Record<ConnectionPoint['type'], XY> | null => {
-    // Snap to the visible shape — flowchart groups use the shape child, not the label box.
-    let target: FabricObject = object
-    if (isFlowchartNode(object)) {
-        const shape = getFlowchartShape(object)
-        if (shape) target = shape
-    }
-
-    target.setCoords()
-    const matrix = target.calcTransformMatrix()
-    const w = target.width ?? 0
-    const h = target.height ?? 0
-    const typed = target as FabricObject & { radius?: number; rx?: number; ry?: number }
-    // Circles use radius; ellipses use rx/ry; boxes use width/height (center origin).
-    const halfX = typed.radius ?? typed.rx ?? w / 2
-    const halfY = typed.radius ?? typed.ry ?? h / 2
-    const strokePad = ((target.strokeWidth ?? 0) * Math.max(target.scaleX || 1, target.scaleY || 1)) / 2
-    const outset = PORT_OUTSET + strokePad + PORT_RADIUS
-
-    const centerPt = util.transformPoint(new Point(0, 0), matrix)
-    const center = { x: centerPt.x, y: centerPt.y }
-
-    // Always transform local edge midpoints through the full matrix so grouped
-    // flowchart children resolve to true canvas / world coordinates.
-    const localMidpoints: Record<ConnectionPoint['type'], Point> = {
-        top: new Point(0, -halfY),
-        right: new Point(halfX, 0),
-        bottom: new Point(0, halfY),
-        left: new Point(-halfX, 0),
-    }
-
-    const boxPorts = {
-        top: util.transformPoint(localMidpoints.top, matrix),
-        right: util.transformPoint(localMidpoints.right, matrix),
-        bottom: util.transformPoint(localMidpoints.bottom, matrix),
-        left: util.transformPoint(localMidpoints.left, matrix),
-    }
-    const aabbPorts: Record<ConnectionPoint['type'], XY> = {
-        top: { x: boxPorts.top.x, y: boxPorts.top.y },
-        right: { x: boxPorts.right.x, y: boxPorts.right.y },
-        bottom: { x: boxPorts.bottom.x, y: boxPorts.bottom.y },
-        left: { x: boxPorts.left.x, y: boxPorts.left.y },
-    }
-
-    // Build world-space silhouette vertices when the box midpoints sit outside the fill.
-    const vertices: XY[] = []
-    const polyPoints = (target as FabricObject & { points?: { x: number; y: number }[] }).points
-    const pathOffset = (target as FabricObject & { pathOffset?: XY }).pathOffset ?? { x: 0, y: 0 }
-
-    if (polyPoints && polyPoints.length >= 3) {
-        for (const p of polyPoints) {
-            const world = util.transformPoint(
-                new Point(p.x - pathOffset.x, p.y - pathOffset.y),
-                matrix
-            )
-            vertices.push({ x: world.x, y: world.y })
-        }
-    } else if (target.type === 'triangle') {
-        const locals = [
-            { x: 0, y: -h / 2 },
-            { x: -w / 2, y: h / 2 },
-            { x: w / 2, y: h / 2 },
-        ]
-        for (const p of locals) {
-            const world = util.transformPoint(new Point(p.x, p.y), matrix)
-            vertices.push({ x: world.x, y: world.y })
-        }
-    } else {
-        return outsetPortsFromCenter(aabbPorts, center, outset)
-    }
-
-    if (vertices.length < 3) {
-        return outsetPortsFromCenter(aabbPorts, center, outset)
-    }
-
-    const directions: Record<ConnectionPoint['type'], XY> = {
-        top: { x: 0, y: -1 },
-        right: { x: 1, y: 0 },
-        bottom: { x: 0, y: 1 },
-        left: { x: -1, y: 0 },
-    }
-
-    const ports = { ...aabbPorts }
-    for (const key of Object.keys(directions) as ConnectionPoint['type'][]) {
-        const dir = directions[key]
-        let bestT = 0
-        let best: XY | null = null
-
-        for (let i = 0; i < vertices.length; i++) {
-            const a = vertices[i]
-            const b = vertices[(i + 1) % vertices.length]
-            const edge = { x: b.x - a.x, y: b.y - a.y }
-            const denom = dir.x * edge.y - dir.y * edge.x
-            if (Math.abs(denom) < 1e-8) continue
-
-            const fromCenter = { x: a.x - center.x, y: a.y - center.y }
-            const t = (fromCenter.x * edge.y - fromCenter.y * edge.x) / denom
-            const u = (fromCenter.x * dir.y - fromCenter.y * dir.x) / denom
-            if (t > 1e-6 && u >= -1e-6 && u <= 1 + 1e-6 && t > bestT) {
-                bestT = t
-                best = { x: center.x + dir.x * t, y: center.y + dir.y * t }
-            }
-        }
-
-        if (best) {
-            ports[key] = best
-        }
-    }
-
-    return outsetPortsFromCenter(ports, center, outset)
-}
-
-const calculateCanvasObjectPoints = (canvas: Canvas) => {
-    const objects = canvas.getObjects().filter(
-        (object) => !(object instanceof Polyline) && !isPortMarker(object) && !isExportExcluded(object)
-    )
-    return objects.flatMap((object) => {
-        if (!isConnectableObject(object)) return []
-        const objectPosition = getObjectPorts(object)
-        if (!objectPosition) {
-            return []
-        }
-        return [{
-            objectId: ensureObjectId(object),
-            objectPosition,
-        }]
-    })
-}
-
-/** Convert a polyline local path point into canvas/world coordinates. */
-const getWorldPointForLinePoint = (line: Polyline, index: number): XY | null => {
-    const points = line.points
-    if (!points?.[index]) {
-        return null
-    }
-
-    const localPoint = new Point(
-        points[index].x - line.pathOffset.x,
-        points[index].y - line.pathOffset.y
-    )
-    const worldPoint = localPoint.transform(line.calcOwnMatrix())
-    return { x: worldPoint.x, y: worldPoint.y }
-}
-
-/**
- * Write a canvas/world point back into polyline local path coordinates.
- * Must call setDimensions() afterwards — otherwise Fabric keeps the old bbox
- * and the stroke gets clipped while control handles still look correct.
- */
-const setLinePointFromWorld = (line: Polyline, index: number, worldPoint: XY): boolean => {
-    const points = line.points
-    if (!points?.[index]) {
-        return false
-    }
-
-    // Keep another vertex fixed in world space while dimensions/pathOffset are recalculated
-    // (same approach Fabric uses in createPolyControls).
-    const anchorIndex = index === 0 ? Math.min(1, points.length - 1) : 0
-    const anchorBefore = new Point(points[anchorIndex].x, points[anchorIndex].y)
-        .subtract(line.pathOffset)
-        .transform(line.calcOwnMatrix())
-
-    const local = util.transformPoint(
-        new Point(worldPoint.x, worldPoint.y),
-        util.invertTransform(line.calcOwnMatrix())
-    )
-    points[index].x = local.x + line.pathOffset.x
-    points[index].y = local.y + line.pathOffset.y
-
-    line.setDimensions()
-    line.set('dirty', true)
-
-    const anchorAfter = new Point(points[anchorIndex].x, points[anchorIndex].y)
-        .subtract(line.pathOffset)
-        .transform(line.calcOwnMatrix())
-    const diff = anchorAfter.subtract(anchorBefore)
-    line.left -= diff.x
-    line.top -= diff.y
-    line.setCoords()
-    return true
-}
-
-/** Snap one dragged vertex to the nearest object edge midpoint within snapDistance. */
-const snapLinePointToNearestMidpoint = (
-    line: Polyline,
-    pointIndex: number,                   // indicate which point on the line is being dragged 0 = start point, 1 = end point
-    canvas: Canvas,
-    snapDistance = DEFAULT_SNAP_DISTANCE
-) => {
-    if (snapDistance <= 0) {
-        const connector = line as ConnectorLine
-        if (connector.endpointConnections?.[pointIndex]) {
-            connector.endpointConnections[pointIndex] = null
-        }
-        return
-    }
-    const worldPoint = getWorldPointForLinePoint(line, pointIndex)
-    if (!worldPoint) {
-        return
-    }
-
-    const objectPoints = calculateCanvasObjectPoints(canvas)
-    let best: {
-        point: XY
-        distance: number
-        objectId: string
-        type: ConnectionPoint['type']
-    } | null = null
-
-    for (const objPoint of objectPoints) {
-        for (const [port, mid] of Object.entries(objPoint.objectPosition) as [ConnectionPoint['type'], XY][]) {
-            const distance = Math.hypot(mid.x - worldPoint.x, mid.y - worldPoint.y)
-            if (distance <= snapDistance && (!best || distance < best.distance)) {
-                best = {
-                    point: mid,
-                    distance,
-                    objectId: objPoint.objectId,
-                    type: port,
-                }
-            }
-        }
-    }
-
-    if (best) {
-        // Snap the dragged endpoint to the nearest object edge midpoint and remember the attachment.
-        setLinePointFromWorld(line, pointIndex, best.point)
-
-        const connector = line as ConnectorLine
-        connector.endpointConnections ??= {}
-        connector.endpointConnections[pointIndex] = {
-            objectId: best.objectId,
-            type: best.type,
-        }
-    } else {
-        const connector = line as ConnectorLine
-        if (connector.endpointConnections?.[pointIndex]) {
-            connector.endpointConnections[pointIndex] = null
-        }
-    }
-}
-
-
-const updateConnectedLines = ({ canvas, obj }: { canvas: Canvas; obj: FabricObject }) => {
-    if (obj instanceof Polyline || isPortMarker(obj)) {
-        return
-    }
-
-    const movedId = (obj as FabricObject & { objectId?: string }).objectId
-    if (!movedId) {
-        return
-    }
-
-    const ports = getObjectPorts(obj)
-    if (!ports) {
-        return
-    }
-
-    for (const object of canvas.getObjects()) {
-        if (!(object instanceof Polyline)) {
-            continue
-        }
-
-        const line = object as ConnectorLine
-        if (!line.endpointConnections) {
-            continue
-        }
-
-        let changed = false
-        for (const [indexStr, conn] of Object.entries(line.endpointConnections)) {
-            if (!conn || conn.objectId !== movedId) {
-                continue
-            }
-            if (setLinePointFromWorld(line, Number(indexStr), ports[conn.type])) {
-                changed = true
-            }
-        }
-
-        if (changed) {
-            line.setCoords()
-        }
-    }
-
-    canvas.requestRenderAll()
-}
-
+import {
+    isPortMarker,
+    snapLinePointToNearestMidpoint,
+    updateConnectedLines,
+} from '@/components/fabric-helper/connectors/ports'
+import { setupConnectorInteractions } from '@/components/fabric-helper/connectors/interactions'
+import { isPlaceableId, startPlacement } from '@/components/fabric-helper/connectors/placement'
+import { isEphemeralId } from '@/components/fabric-helper/export-utils'
 
 function page() {
     const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -490,10 +129,8 @@ function page() {
     )
     const settingsRef = useRef(playgroundSettings)
     settingsRef.current = playgroundSettings
-    const connectDragRef = useRef<ConnectDragState | null>(null)
-    const portHostRef = useRef<FabricObject | null>(null)
 
-    const [, setSelectedObject] = useState<FabricObject | undefined>(undefined)
+    const [selectedObject, setSelectedObject] = useState<FabricObject | undefined>(undefined)
     const selectedObjectRef = useRef<FabricObject | undefined>(undefined)
 
     // Undo / redo history
@@ -510,15 +147,7 @@ function page() {
         setCanRedo(redoStackRef.current.length > 0)
     }
 
-    const isHistoryExcluded = (serialized: Record<string, unknown>) => {
-        const id = typeof serialized.id === 'string' ? serialized.id : ''
-        return (
-            id.startsWith('vertical') ||
-            id.startsWith('horizontal') ||
-            id.startsWith('__pen-') ||
-            id.startsWith('__port-')
-        )
-    }
+    const isHistoryExcluded = (serialized: Record<string, unknown>) => isEphemeralId(serialized.id)
 
     // Fabric v6: pass custom props to toObject(), not toJSON() (toJSON takes no args).
     const serializeCanvas = (targetCanvas: Canvas) => {
@@ -738,7 +367,7 @@ function page() {
         })
         const teardownErasableDefaults = applyErasableDefaults(initCanvas, (object) => {
             const { isCropFrame, id } = object as FabricObject & { isCropFrame?: boolean; id?: string }
-            return !!isCropFrame || /^(vertical|horizontal|__pen-)/.test(id ?? '')
+            return !!isCropFrame || isEphemeralId(id)
         })
         resizeCanvasToStage(initCanvas, stage)
         initCanvas.renderAll()
@@ -749,12 +378,15 @@ function page() {
         const onResize = () => resizeCanvasToStage(initCanvas, stage)
         window.addEventListener('resize', onResize)
 
-        initCanvas.on('object:moving', (e) => {
+        const onObjectTransforming = (e: { target?: FabricObject }) => {
             if (!e.target || isPortMarker(e.target)) return
             // Edge/center snapping + guidelines — re-enable later
             // handleObjectMoving({ canvas: initCanvas, obj: e.target, guidelines, setGuidelines });
-            updateConnectedLines({ canvas: initCanvas, obj: e.target });
-        });
+            updateConnectedLines({ canvas: initCanvas, obj: e.target })
+        }
+        initCanvas.on('object:moving', onObjectTransforming)
+        initCanvas.on('object:scaling', onObjectTransforming)
+        initCanvas.on('object:rotating', onObjectTransforming)
 
         const isEphemeralHistoryTarget = (target?: FabricObject | null) => {
             if (!target) return true
@@ -874,6 +506,9 @@ function page() {
             teardownPanZoom()
             window.removeEventListener('resize', onResize)
             window.removeEventListener('keydown', handleKeyDown)
+            initCanvas.off('object:moving', onObjectTransforming)
+            initCanvas.off('object:scaling', onObjectTransforming)
+            initCanvas.off('object:rotating', onObjectTransforming)
             initCanvas.off('object:modified', handleObjectModified)
             initCanvas.off('object:added', handleObjectAdded)
             initCanvas.off('object:removed', handleObjectRemoved)
@@ -1005,284 +640,27 @@ function page() {
     }, [canvas, eraserMode, eraserWidth, eraserRestore])
 
 
-    // Connection port circles + click-to-connect
+    // Connectors: port markers, drag-to-connect with snapping, hover quick-add
     useEffect(() => {
         if (!canvas) return
-
-        const clearPortMarkers = () => {
-            const markers = canvas.getObjects().filter(isPortMarker)
-            for (const marker of markers) {
-                canvas.remove(marker)
-            }
-        }
-
-        const hostsForPorts = (): FabricObject[] => {
-            if (connectDragRef.current) {
-                return canvas.getObjects().filter(isConnectableObject)
-            }
-            const active = canvas.getActiveObject()
-            if (active && isConnectableObject(active)) {
-                portHostRef.current = active
-                return [active]
-            }
-            // Keep ports while a connectable host stays conceptually selected
-            if (portHostRef.current && canvas.getObjects().includes(portHostRef.current)) {
-                return [portHostRef.current]
-            }
-            return []
-        }
-
-        const syncPortMarkers = () => {
-            clearPortMarkers()
-            const hosts = hostsForPorts()
-            if (hosts.length === 0) {
-                canvas.requestRenderAll()
-                return
-            }
-
-            for (const host of hosts) {
-                const ports = getObjectPorts(host)
-                if (!ports) continue
-                const hostId = ensureObjectId(host)
-
-                for (const portType of Object.keys(ports) as ConnectionPoint['type'][]) {
-                    const pos = ports[portType]
-                    const marker = new Circle({
-                        left: pos.x,
-                        top: pos.y,
-                        originX: 'center',
-                        originY: 'center',
-                        radius: PORT_RADIUS,
-                        fill: '#ffffff',
-                        stroke: PORT_COLOR,
-                        strokeWidth: 2,
-                        strokeUniform: true,
-                        selectable: false,
-                        evented: true,
-                        hasControls: false,
-                        hasBorders: false,
-                        hoverCursor: 'crosshair',
-                        objectCaching: false,
-                        excludeFromExport: true,
-                        // Prefer the port over the host shape / selection handles underneath
-                        perPixelTargetFind: false,
-                    }) as PortMarker
-                    marker.isPortMarker = true
-                    marker.id = `__port-${hostId}-${portType}`
-                    marker.objectId = marker.id
-                    marker.portHostId = hostId
-                    marker.portType = portType
-                    canvas.add(marker)
-                    canvas.bringObjectToFront(marker)
-                }
-            }
-            canvas.requestRenderAll()
-        }
-
-        const cancelConnect = (removeLine: boolean) => {
-            const drag = connectDragRef.current
-            if (!drag) return
-            if (removeLine && canvas.getObjects().includes(drag.line)) {
-                canvas.remove(drag.line)
-            }
-            connectDragRef.current = null
-            syncPortMarkers()
-            canvas.requestRenderAll()
-        }
-
-        const startConnectFromPort = (host: FabricObject, portType: ConnectionPoint['type']) => {
-            const ports = getObjectPorts(host)
-            if (!ports) return
-            const start = ports[portType]
-            const hostId = ensureObjectId(host)
-
-            // Pen-style open polyline (not the shape-sidebar "line" stub)
-            const poly = new Polyline(
-                [
-                    { x: start.x, y: start.y },
-                    { x: start.x + 1, y: start.y },
-                ],
-                {
-                    fill: '',
-                    stroke: getThemeLineStroke(),
-                    strokeWidth: 2,
-                    strokeUniform: true,
-                    objectCaching: false,
-                    hasBorders: false,
-                    lockScalingX: true,
-                    lockScalingY: true,
-                    lockRotation: true,
-                }
-            )
-            const connector = poly as ConnectorLine & {
-                shapeKind?: string
-                isOpenPolygon?: boolean
-            }
-            connector.shapeKind = 'polygon'
-            connector.isOpenPolygon = true
-            connector.isConnector = true
-            connector.endpointConnections = {
-                0: { objectId: hostId, type: portType },
-                1: null,
-            }
-
-            const onEndpointDrag = (dragLine: Polyline, pointIndex: number) => {
-                snapLinePointToNearestMidpoint(
-                    dragLine,
-                    pointIndex,
-                    canvas,
-                    getConnectorSnapDistance()
-                )
-            }
-            enableLineVertexEditing(canvas, poly, onEndpointDrag)
-            poly.on('selected', () => {
-                enableLineVertexEditing(canvas, poly, onEndpointDrag)
-            })
-
-            addObjectToCanvas(canvas, poly, { centerInViewport: false })
-            setLinePointFromWorld(connector, 0, start)
-            setLinePointFromWorld(connector, 1, { x: start.x + 1, y: start.y })
-
-            connectDragRef.current = {
-                line: connector,
-                sourceObjectId: hostId,
-                sourcePort: portType,
-            }
-            canvas.discardActiveObject()
-            syncPortMarkers()
-        }
-
-        const finishConnectOnPort = (host: FabricObject, portType: ConnectionPoint['type']) => {
-            const drag = connectDragRef.current
-            if (!drag) return
-            const ports = getObjectPorts(host)
-            if (!ports) return
-            const end = ports[portType]
-            const hostId = ensureObjectId(host)
-
-            setLinePointFromWorld(drag.line, 1, end)
-            drag.line.endpointConnections ??= { 0: null, 1: null }
-            drag.line.endpointConnections[1] = { objectId: hostId, type: portType }
-            // Keep source end locked to its port
-            const source = canvas.getObjects().find(
-                (obj) => ensureObjectId(obj) === drag.sourceObjectId && isConnectableObject(obj)
-            )
-            if (source) {
-                const sourcePorts = getObjectPorts(source)
-                if (sourcePorts) {
-                    setLinePointFromWorld(drag.line, 0, sourcePorts[drag.sourcePort])
-                }
-            }
-            connectDragRef.current = null
-            canvas.setActiveObject(drag.line)
-            portHostRef.current = null
-            syncPortMarkers()
-        }
-
-        const onSelection = () => {
-            if (connectDragRef.current) {
-                syncPortMarkers()
-                return
-            }
-            const active = canvas.getActiveObject()
-            if (active && isConnectableObject(active)) {
-                portHostRef.current = active
-            } else if (!active) {
-                portHostRef.current = null
-            }
-            setSelectedObject(active ?? undefined)
-            selectedObjectRef.current = active ?? undefined
-            syncPortMarkers()
-        }
-
-        const onMovingOrModified = (e: { target?: FabricObject }) => {
-            if (!e.target || isPortMarker(e.target)) return
-            if (e.target instanceof Polyline) return
-            updateConnectedLines({ canvas, obj: e.target })
-            syncPortMarkers()
-        }
-
-        const onMouseDown = (opt: { target?: FabricObject; e: Event }) => {
-            const target = opt.target
-            if (isPortMarker(target) && target.portHostId && target.portType) {
-                opt.e.preventDefault()
-                opt.e.stopPropagation()
-                const host = canvas.getObjects().find(
-                    (obj) => ensureObjectId(obj) === target.portHostId && isConnectableObject(obj)
-                )
-                if (!host) return
-
-                if (connectDragRef.current) {
-                    finishConnectOnPort(host, target.portType)
-                } else {
-                    startConnectFromPort(host, target.portType)
-                }
-                return
-            }
-
-            if (connectDragRef.current && !isPortMarker(target)) {
-                // Empty / other click — keep free endpoint, exit connect mode
-                connectDragRef.current = null
-                syncPortMarkers()
-            }
-        }
-
-        const onMouseMove = (opt: { e: Event }) => {
-            const drag = connectDragRef.current
-            if (!drag) return
-            const e = opt.e as MouseEvent
-            const pointer = canvas.getScenePoint(e)
-            setLinePointFromWorld(drag.line, 1, { x: pointer.x, y: pointer.y })
-            // Keep source glued while dragging
-            const source = canvas.getObjects().find(
-                (obj) => ensureObjectId(obj) === drag.sourceObjectId && isConnectableObject(obj)
-            )
-            if (source) {
-                const sourcePorts = getObjectPorts(source)
-                if (sourcePorts) {
-                    setLinePointFromWorld(drag.line, 0, sourcePorts[drag.sourcePort])
-                }
-            }
-            canvas.requestRenderAll()
-        }
-
-        const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key !== 'Escape') return
-            if (!connectDragRef.current) return
-            e.preventDefault()
-            cancelConnect(true)
-        }
-
-        syncPortMarkers()
-        canvas.on('selection:created', onSelection)
-        canvas.on('selection:updated', onSelection)
-        canvas.on('selection:cleared', onSelection)
-        canvas.on('object:moving', onMovingOrModified)
-        canvas.on('object:modified', onMovingOrModified)
-        canvas.on('mouse:down', onMouseDown)
-        canvas.on('mouse:move', onMouseMove)
-        window.addEventListener('keydown', onKeyDown)
-
-        return () => {
-            const drag = connectDragRef.current
-            if (drag && canvas.getObjects().includes(drag.line)) {
-                canvas.remove(drag.line)
-            }
-            connectDragRef.current = null
-            clearPortMarkers()
-            canvas.off('selection:created', onSelection)
-            canvas.off('selection:updated', onSelection)
-            canvas.off('selection:cleared', onSelection)
-            canvas.off('object:moving', onMovingOrModified)
-            canvas.off('object:modified', onMovingOrModified)
-            canvas.off('mouse:down', onMouseDown)
-            canvas.off('mouse:move', onMouseMove)
-            window.removeEventListener('keydown', onKeyDown)
-        }
+        return setupConnectorInteractions(canvas, {
+            getSnapDistance: getConnectorSnapDistance,
+            onSelectionChange: (active) => {
+                setSelectedObject(active)
+                selectedObjectRef.current = active
+            },
+        })
     }, [canvas])
 
     const enterFlowchartMode = () => {
         setFlowchartMode((prev) => !prev)
+    }
+
+    /** Sidebar click: shapes follow the cursor as a preview until the next click places them. */
+    const handleSidebarAdd = (shapeId: string) => {
+        if (!canvas) return
+        if (isPlaceableId(shapeId) && startPlacement(canvas, shapeId)) return
+        handleAddShape(shapeId)
     }
 
     const handleAddShape = (shapeId: string) => {
@@ -1330,11 +708,15 @@ function page() {
         {/* -------------------------- LEFT SIDEBAR -------------------------- */}
         {canvas && (
           <aside className={`${styles.panel} ${styles.leftPanel}`}>
-            <ShapeSidebar onAddShape={handleAddShape} />
+            <ShapeSidebar onAddShape={handleSidebarAdd} />
           </aside>
         )}
 
         {/* -------------------------- TEXT EDIT MENU -------------------------- */}
+        {canvas && selectedObject instanceof ElbowConnector && (
+            <ConnectorMenu canvas={canvas} connector={selectedObject} />
+        )}
+
         {canvas && textEdit && (
             <FlowchartTextMenu
                 canvas={canvas}

@@ -7,12 +7,21 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { setErasable } from '@/components/fabric-helper/erase-utils'
+import {
+  bakeFlowchartScale,
+  getFlowchartShape,
+  isFlowchartNode,
+} from '@/components/fabric-helper/flowchart-node'
 
 type SidebarProps = {
   canvas: Canvas
   refreshKey: number
   handleFramesUpdated: () => void
 }
+
+/** Appearance props live on the shape child for flowchart groups. */
+const resolveStyleTarget = (object: FabricObject) =>
+  isFlowchartNode(object) ? (getFlowchartShape(object) ?? object) : object
 
 const Sidebar = ({ canvas, refreshKey, handleFramesUpdated }: SidebarProps) => {
   const [selectedObject, setSelectedObject] = useState<FabricObject | null>(null)
@@ -38,19 +47,24 @@ const Sidebar = ({ canvas, refreshKey, handleFramesUpdated }: SidebarProps) => {
 
       setSelectedObject(object)
 
-      const scaledWidth = Math.round((object.width ?? 0) * (object.scaleX ?? 1))
-      const scaledHeight = Math.round((object.height ?? 0) * (object.scaleY ?? 1))
+      const styleTarget = resolveStyleTarget(object)
+      const sizeSource = isFlowchartNode(object)
+        ? (getFlowchartShape(object) ?? object)
+        : object
+
+      const scaledWidth = Math.round(sizeSource.getScaledWidth())
+      const scaledHeight = Math.round(sizeSource.getScaledHeight())
 
       setLeft(Math.round(object.left ?? 0))
       setTop(Math.round(object.top ?? 0))
       setWidth(scaledWidth)
       setHeight(scaledHeight)
-      setColor(typeof object.fill === 'string' ? object.fill : '#000000')
-      setBorderColor(typeof object.stroke === 'string' ? object.stroke : '#000000')
-      setBorderWidth(object.strokeWidth ?? 0)
-      setOpacity(object.opacity ?? 1)
-      setVisible(object.visible ?? true)
-      setErasableState(Boolean(object.erasable))
+      setColor(typeof styleTarget.fill === 'string' ? styleTarget.fill : '#000000')
+      setBorderColor(typeof styleTarget.stroke === 'string' ? styleTarget.stroke : '#000000')
+      setBorderWidth(styleTarget.strokeWidth ?? 0)
+      setOpacity(styleTarget.opacity ?? 1)
+      setVisible(styleTarget.visible ?? true)
+      setErasableState(Boolean(styleTarget.erasable))
     }
 
     const clearSettings = () => {
@@ -103,10 +117,50 @@ const Sidebar = ({ canvas, refreshKey, handleFramesUpdated }: SidebarProps) => {
     }
   }, [canvas])
 
+  /** Position / group-level changes stay on the active object. */
   const applyObjectChange = (updates: Record<string, unknown>) => {
     if (!selectedObject) return
     selectedObject.set(updates)
     selectedObject.setCoords()
+    canvas.requestRenderAll()
+  }
+
+  /** Fill / stroke / etc. go to the shape child when a flowchart is selected. */
+  const applyStyleChange = (updates: Record<string, unknown>) => {
+    if (!selectedObject) return
+    const target = resolveStyleTarget(selectedObject)
+    target.set(updates)
+    target.setCoords()
+    if (isFlowchartNode(selectedObject)) {
+      selectedObject.setCoords()
+      selectedObject.dirty = true
+    }
+    canvas.requestRenderAll()
+  }
+
+  const resizeFlowchartAxis = (axis: 'width' | 'height', value: number) => {
+    if (!selectedObject || !isFlowchartNode(selectedObject)) return
+    const shape = getFlowchartShape(selectedObject)
+    if (!shape) return
+
+    const safe = Math.max(1, value)
+    if (axis === 'width') {
+      const current = shape.getScaledWidth()
+      if (current > 0) {
+        shape.set({ scaleX: (shape.scaleX || 1) * (safe / current) })
+      }
+      setWidth(safe)
+    } else {
+      const current = shape.getScaledHeight()
+      if (current > 0) {
+        shape.set({ scaleY: (shape.scaleY || 1) * (safe / current) })
+      }
+      setHeight(safe)
+    }
+
+    bakeFlowchartScale(selectedObject)
+    selectedObject.setCoords()
+    canvas.fire('object:modified', { target: selectedObject })
     canvas.requestRenderAll()
   }
 
@@ -121,46 +175,56 @@ const Sidebar = ({ canvas, refreshKey, handleFramesUpdated }: SidebarProps) => {
   }
 
   const handleWidthChange = (value: number) => {
+    if (selectedObject && isFlowchartNode(selectedObject)) {
+      resizeFlowchartAxis('width', value)
+      return
+    }
     setWidth(value)
     applyObjectChange({ width: value, scaleX: 1 })
   }
 
   const handleHeightChange = (value: number) => {
+    if (selectedObject && isFlowchartNode(selectedObject)) {
+      resizeFlowchartAxis('height', value)
+      return
+    }
     setHeight(value)
     applyObjectChange({ height: value, scaleY: 1 })
   }
 
   const handleColorChange = (value: string) => {
     setColor(value)
-    applyObjectChange({ fill: value })
+    applyStyleChange({ fill: value })
   }
 
   const handleBorderColorChange = (value: string) => {
     setBorderColor(value)
-    applyObjectChange({ stroke: value })
+    applyStyleChange({ stroke: value })
   }
 
   const handleBorderWidthChange = (value: number) => {
     setBorderWidth(value)
-    applyObjectChange({ strokeWidth: value })
+    applyStyleChange({ strokeWidth: value })
   }
 
   const handleOpacityChange = (value: number) => {
     setOpacity(value)
-    applyObjectChange({ opacity: value })
+    applyStyleChange({ opacity: value })
   }
 
   const handleVisibleChange = (value: boolean) => {
     setVisible(value)
-    applyObjectChange({ visible: value })
+    applyStyleChange({ visible: value })
   }
 
   const handleErasableChange = (value: boolean) => {
     if (!selectedObject) return
     setErasableState(value)
-    // Apply to everything that is selected (multi-select), not just the first object.
     const active = canvas.getActiveObjects()
-    setErasable(canvas, active.length > 0 ? active : [selectedObject], value)
+    const targets = (active.length > 0 ? active : [selectedObject]).map((obj) =>
+      isFlowchartNode(obj) ? (getFlowchartShape(obj) ?? obj) : obj
+    )
+    setErasable(canvas, targets, value)
   }
 
   const disabled = !selectedObject

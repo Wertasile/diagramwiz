@@ -2,6 +2,7 @@ import {
   Canvas,
   Circle,
   controlsUtils,
+  Group,
   Polyline,
   Rect,
   Shadow,
@@ -122,11 +123,30 @@ export const addComment = (canvas: Canvas, options: ShapeOptions = {}) => {
 
 /** Yellow sticky-note textbox. */
 export const addStickyNote = (canvas: Canvas, options: ShapeOptions = {}) => {
-  const sticky = new Textbox('', {
+
+  const stickyNote = new Rect({
+    ...DEFAULT_SHAPE_OPTIONS,
+    width: 170,
+    minWidth: 120,
+    minHeight: 120,
+    shapeKind: 'stickyNote',
+    backgroundColor: '#fef08a',
+    borderColor: '#1f2937',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderRadius: 10,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 10,
+    ...options,
+  })
+  const textbox = new Textbox('', {
     left: DEFAULT_SHAPE_OPTIONS.left,
     top: DEFAULT_SHAPE_OPTIONS.top,
     width: 170,
     minWidth: 120,
+    minHeight: 120,
     fontSize: 14,
     fontFamily: 'Comic Sans MS, "Segoe Print", "Bradley Hand", Arial',
     fontWeight: 'normal',
@@ -145,11 +165,14 @@ export const addStickyNote = (canvas: Canvas, options: ShapeOptions = {}) => {
     shapeKind: 'stickyNote',
     ...options,
   })
-  withPlaceholder(sticky, 'Sticky note', {
+  const group = new Group([stickyNote, textbox], {
+    ...DEFAULT_SHAPE_OPTIONS,
+  })
+  withPlaceholder(textbox, 'Sticky note', {
     contentFill: '#1f2937',
     placeholderFill: 'rgba(55, 65, 81, 0.55)',
   })
-  return addObjectToCanvas(canvas, sticky)
+  return addObjectToCanvas(canvas, group)
 }
 
 /** Vertex (polyline) editing controls — used immediately on select, no scale box. */

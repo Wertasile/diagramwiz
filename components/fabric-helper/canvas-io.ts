@@ -7,13 +7,14 @@ import {
   Textbox,
   type TMat2D,
 } from 'fabric'
-import { isExportExcluded } from './export-utils'
+import { isEphemeralId, isExportExcluded } from './export-utils'
 import {
   attachFlowchartScaleBehavior,
   isFlowchartNode,
 } from './flowchart-node'
 import { enableLineVertexEditing, type ConnectorLine } from './add-shapes'
 import { bindPlaceholderHandlers } from './text-placeholder'
+import { ElbowConnector } from './connectors/elbow-connector'
 import { addObjectToCanvas, centerObjectInViewport, ensureObjectId } from './object-utils'
 
 /** Custom fields we stamp on objects — must round-trip through JSON. */
@@ -25,6 +26,13 @@ export const CANVAS_CUSTOM_PROPERTIES = [
   'zIndex',
   'isCropFrame',
   'isConnector',
+  'connectorKind',
+  'manualSegments',
+  'routeType',
+  'startHead',
+  'endHead',
+  'waypoints',
+  'curveBend',
   'endpointConnections',
   'flowchartNode',
   'isOpenPolygon',
@@ -80,12 +88,7 @@ function walkObjects(objects: FabricObject[], visit: (object: FabricObject) => v
 }
 
 function isExcludedSerialized(serialized: Record<string, unknown>) {
-  const id = typeof serialized.id === 'string' ? serialized.id : ''
-  return (
-    id.startsWith('vertical') ||
-    id.startsWith('horizontal') ||
-    id.startsWith('__pen-')
-  )
+  return isEphemeralId(serialized.id)
 }
 
 export type RehydrateOptions = {
@@ -98,8 +101,17 @@ export function rehydrateCanvasObjects(canvas: Canvas, options: RehydrateOptions
 
   const topLevel = canvas.getObjects()
 
+  const elbows: ElbowConnector[] = []
+
   for (const object of topLevel) {
     ensureObjectId(object)
+
+    // Auto-routed connectors own their controls; just re-glue them after the loop.
+    if (object instanceof ElbowConnector) {
+      object.rebuildControls()
+      elbows.push(object)
+      continue
+    }
 
     const connector = object as ConnectorLine & {
       shapeKind?: string
@@ -139,6 +151,8 @@ export function rehydrateCanvasObjects(canvas: Canvas, options: RehydrateOptions
       bindPlaceholderHandlers(object)
     }
   })
+
+  for (const elbow of elbows) elbow.reroute(canvas)
 
   canvas.requestRenderAll()
 }

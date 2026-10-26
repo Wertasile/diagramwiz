@@ -18,14 +18,22 @@ export function isCropFrame(object: FabricObject): boolean {
   )
 }
 
+/** Id prefixes of transient helper objects (guides, pen preview, ports, snap highlights, ghosts). */
+export const EPHEMERAL_ID_PREFIXES = [
+  'vertical',
+  'horizontal',
+  '__pen-',
+  '__port-',
+  '__hl-',
+  '__ghost-',
+] as const
+
+export function isEphemeralId(id: unknown): boolean {
+  return typeof id === 'string' && EPHEMERAL_ID_PREFIXES.some((prefix) => id.startsWith(prefix))
+}
+
 export function isExportExcluded(object: FabricObject): boolean {
-  const id = (object as FabricObject & { id?: string }).id ?? ''
-  return (
-    id.startsWith('vertical') ||
-    id.startsWith('horizontal') ||
-    id.startsWith('__pen-') ||
-    id.startsWith('__port-')
-  )
+  return isEphemeralId((object as FabricObject & { id?: string }).id)
 }
 
 export function downloadDataUrl(dataUrl: string, filename: string) {

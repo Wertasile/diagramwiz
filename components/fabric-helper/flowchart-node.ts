@@ -28,14 +28,42 @@ export type FlowchartTextEditHandlers = {
 export const isFlowchartNode = (obj: FabricObject | null | undefined): obj is FlowchartNode =>
   Boolean(obj && (obj as FabricObject & { flowchartNode?: boolean }).flowchartNode)
 
+// extracts the textbox from the group
 export const getFlowchartLabel = (group: Group): Textbox | null => {
   const label = group.getObjects().find((obj) => obj instanceof Textbox)
   return label instanceof Textbox ? label : null
 }
 
+// extracts the shape from the group
 export const getFlowchartShape = (group: Group): FabricObject | null => {
   const shape = group.getObjects().find((obj) => !(obj instanceof Textbox))
   return shape ?? null
+}
+
+/** Walk up from a child to its flowchart group, if any. */
+export const getParentFlowchartNode = (
+  object: FabricObject | null | undefined
+): FlowchartNode | null => {
+  let parent: FabricObject | undefined =
+    object && 'group' in object ? (object.group as FabricObject | undefined) : undefined
+  while (parent) {
+    if (isFlowchartNode(parent)) return parent
+    parent =
+      'group' in parent ? (parent.group as FabricObject | undefined) : undefined
+  }
+  return null
+}
+
+/**
+ * Shape/label must never become the canvas active object for transforms.
+ * Hit-testing stays on the group; the label is only selectable while text-editing.
+ */
+export const lockFlowchartChildren = (group: Group) => {
+  const shape = getFlowchartShape(group)
+  const label = getFlowchartLabel(group)
+  shape?.set({ selectable: false, evented: false })
+  label?.set({ selectable: false, evented: true, editable: true })
+  group.set({ interactive: false, subTargetCheck: true })
 }
 
 const createLabel = (width: number, height: number, text: string, fontSize = 16) => {
@@ -52,7 +80,7 @@ const createLabel = (width: number, height: number, text: string, fontSize = 16)
     textAlign: 'center',
     splitByGrapheme: true,
     editable: true,
-    selectable: true,
+    selectable: false,
     evented: true,
     objectCaching: false,
   })
@@ -94,6 +122,8 @@ export const createFlowchartNode = (
     originX: 'left',
     originY: 'top',
     strokeUniform: true,
+    selectable: false,
+    evented: false,
   })
   shape.setCoords()
 
@@ -110,6 +140,7 @@ export const createFlowchartNode = (
 
   group.flowchartNode = true
   group.shapeKind = shapeKind
+  lockFlowchartChildren(group)
   attachFlowchartScaleBehavior(group)
 
   return group
@@ -173,6 +204,8 @@ export const bakeFlowchartScale = (group: Group) => {
 
 /** Keep label font size constant while scaling; bake scale on modify. */
 export const attachFlowchartScaleBehavior = (group: Group) => {
+  lockFlowchartChildren(group)
+
   group.on('scaling', () => {
     syncLabelCounterScale(group)
   })
@@ -217,7 +250,8 @@ export const enterFlowchartTextEdit = (
     const handleExit = () => {
       textbox.off('changed', handleChange)
       textbox.off('editing:exited', handleExit)
-      group.set({ interactive: false })
+      // Relock children before reselecting so shape cannot stay active.
+      lockFlowchartChildren(group)
       bakeFlowchartScale(group)
       handlers?.onEditEnd?.()
 
@@ -229,6 +263,26 @@ export const enterFlowchartTextEdit = (
     textbox.on('changed', handleChange)
     textbox.on('editing:exited', handleExit)
   })
+}
+
+/**
+ * If a flowchart child somehow becomes the active object (outside text edit),
+ * bounce selection back to the parent group.
+ */
+const redirectFlowchartChildSelection = (canvas: Canvas) => {
+  const active = canvas.getActiveObject()
+  if (!active || isFlowchartNode(active)) return
+
+  const parent = getParentFlowchartNode(active)
+  if (!parent) return
+
+  // Allow the label to stay active while entering / during text edit.
+  if (active instanceof Textbox && (active.isEditing || parent.interactive)) {
+    return
+  }
+
+  canvas.setActiveObject(parent)
+  canvas.requestRenderAll()
 }
 
 /**
@@ -245,10 +299,17 @@ export const setupFlowchartTextEditing = (
     enterFlowchartTextEdit(canvas, target, handlers)
   }
 
+  const onSelectionCreated = () => redirectFlowchartChildSelection(canvas)
+  const onSelectionUpdated = () => redirectFlowchartChildSelection(canvas)
+
   canvas.on('mouse:dblclick', onDblClick)
+  canvas.on('selection:created', onSelectionCreated)
+  canvas.on('selection:updated', onSelectionUpdated)
 
   return () => {
     canvas.off('mouse:dblclick', onDblClick)
+    canvas.off('selection:created', onSelectionCreated)
+    canvas.off('selection:updated', onSelectionUpdated)
   }
 }
 
